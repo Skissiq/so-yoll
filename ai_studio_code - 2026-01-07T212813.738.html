@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SocialBook Pro - 終極穩定版</title>
+    <style>
+        :root { --fb-blue: #1877f2; --fb-green: #42b72a; --bg-gray: #f0f2f5; --text-main: #1c1e21; }
+        * { box-sizing: border-box; } /* 修正排版溢出 */
+        body { font-family: -apple-system, sans-serif; background: var(--bg-gray); margin: 0; color: var(--text-main); }
+        
+        /* 載入中動畫層 */
+        #loader-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); z-index: 9999; flex-direction: column; justify-content: center; align-items: center; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--fb-blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        header { background: var(--fb-blue); color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .logo { font-size: 22px; font-weight: bold; cursor: pointer; }
+        .nav-btns button { background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-left: 5px; }
+
+        .container { max-width: 550px; margin: 15px auto; padding: 0 10px; }
+        .card { background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border: 1px solid #ddd; width: 100%; position: relative; }
+        .hidden { display: none !important; }
+
+        input, textarea { width: 100%; border: 1px solid #ddd; background: #f0f2f5; border-radius: 8px; padding: 12px; font-size: 16px; outline: none; margin-bottom: 10px; font-family: inherit; }
+        textarea { border-radius: 15px; resize: none; border: none; }
+        .btn-blue { background: var(--fb-blue); color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        
+        .avatar { width: 40px; height: 40px; border-radius: 50%; background: #eee; margin-right: 10px; object-fit: cover; border: 1px solid #ddd; }
+        .post-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .delete-btn { background: none; border: none; color: #ccc; cursor: pointer; font-size: 20px; line-height: 1; transition: 0.2s; padding: 0 5px; }
+        .delete-btn:hover { color: #f02849; }
+
+        .group-tag { background: #e7f3ff; color: var(--fb-blue); padding: 4px 10px; border-radius: 6px; font-size: 11px; margin-bottom: 8px; display: inline-block; font-weight: bold; cursor: pointer; }
+        .group-banner { background: linear-gradient(135deg, #1877f2, #0d47a1); color: white; padding: 30px 20px; border-radius: 10px 10px 0 0; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div id="loader-overlay">
+    <div class="spinner"></div>
+    <p id="loader-text" style="color: var(--fb-blue); font-weight: bold; margin-top: 10px;">資料同步中...</p>
+</div>
+
+<header>
+    <div class="logo" onclick="changeView('feed')">SocialBook</div>
+    <div id="mainNav" class="nav-btns hidden">
+        <button onclick="changeView('feed')">首頁</button>
+        <button onclick="changeView('groups')">社團</button>
+        <button onclick="changeView('profile')">我的</button>
+        <button onclick="logout()">登出</button>
+    </div>
+</header>
+
+<div class="container">
+    <!-- 1. 登入頁面 -->
+    <div id="view-auth" class="card" style="text-align: center;">
+        <h2 id="authTitle">登入 SocialBook</h2>
+        <input type="text" id="user" placeholder="帳號名稱">
+        <input type="password" id="pass" placeholder="密碼">
+        <button class="btn-blue" onclick="handleAuth()">進入系統</button>
+        <p onclick="isLoginMode=!isLoginMode; updateAuthUI()" style="color:var(--fb-blue); cursor:pointer; font-size:14px; margin-top:15px;" id="toggleBtn">註冊新帳號</p>
+    </div>
+
+    <!-- 2. 首頁：只顯示公開貼文 -->
+    <div id="view-feed" class="hidden">
+        <div class="card">
+            <textarea id="postInput" rows="2" placeholder="分享新鮮事..."></textarea>
+            <button class="btn-blue" style="width:auto; float:right; padding:8px 25px;" onclick="submitPost('公開')">發佈</button>
+            <div style="clear:both;"></div>
+        </div>
+        <div id="feedContent"></div>
+    </div>
+
+    <!-- 3. 社團列表 -->
+    <div id="view-groups" class="hidden">
+        <div class="card">
+            <h3>建立新社團</h3>
+            <input type="text" id="gn" placeholder="社團名稱">
+            <button onclick="createGroup()" class="btn-blue" style="background:var(--fb-green);">確認建立</button>
+        </div>
+        <h3>我的社團 / 推薦社團</h3>
+        <div id="groupList" class="card" style="padding:0;"></div>
+    </div>
+
+    <!-- 4. 社團專頁：只顯示該社團貼文 -->
+    <div id="view-group-detail" class="hidden">
+        <button onclick="changeView('groups')" style="margin-bottom:10px; border:none; background:none; color:var(--fb-blue); cursor:pointer; font-weight:bold;">← 返回列表</button>
+        <div class="card" style="padding:0; overflow:hidden;">
+            <div class="group-banner"><h1 id="gd-name" style="margin:0;"></h1></div>
+            <div style="padding:15px;">
+                <textarea id="groupPostInput" rows="2" placeholder="在此社團發佈內容..."></textarea>
+                <button class="btn-blue" style="width:auto; float:right; padding:8px 25px;" onclick="submitPost(currentGroupName)">在此發佈</button>
+                <div style="clear:both;"></div>
+            </div>
+        </div>
+        <div id="groupDetailContent"></div>
+    </div>
+
+    <!-- 5. 個人主頁：顯示自己所有貼文 -->
+    <div id="view-profile" class="hidden">
+        <div class="card" style="text-align:center;">
+            <img id="p-avatar" src="https://www.w3schools.com/howto/img_avatar.png" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:2px solid #ddd;">
+            <h2 id="p-name"></h2>
+            <button class="btn-blue" style="background:#eee; color:#333; width:auto; padding:5px 20px;" onclick="changeView('feed')">回動態牆</button>
+        </div>
+        <div id="profileContent"></div>
+    </div>
+</div>
+
+<script>
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbydk3zAXtxnQnMBWno2k-eG8YJF6V9Jfec0nH0mAww1B9O12R_a3noCrS230GjBJnUu/exec';
+    
+    let me = JSON.parse(localStorage.getItem('social_me') || 'null');
+    let isLoginMode = true;
+    let currentGroupName = "";
+
+    window.onload = () => { if(me) enterApp(); };
+
+    function showLoading(show, text = "同步中...") {
+        document.getElementById('loader-overlay').style.display = show ? 'flex' : 'none';
+        document.getElementById('loader-text').innerText = text;
+    }
+
+    // 核心 API 傳輸 (解決 CORS 與失靈問題)
+    async function apiRequest(data) {
+        try {
+            const response = await fetch(scriptURL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(data)
+            });
+            return await response.text();
+        } catch (err) {
+            alert("連線失敗！請檢查權限設定。\n錯誤：" + err.message);
+            throw err;
+        }
+    }
+
+    async function handleAuth() {
+        const u = document.getElementById('user').value.trim();
+        const p = document.getElementById('pass').value.trim();
+        if(!u || !p) return alert("請輸入帳密");
+        showLoading(true, "身分驗證中...");
+        try {
+            const action = isLoginMode ? 'login' : 'register';
+            const res = await apiRequest({ action, username: u, password: p });
+            if (res.indexOf("成功") !== -1) {
+                me = { username: u };
+                localStorage.setItem('social_me', JSON.stringify(me));
+                enterApp();
+            } else alert(res);
+        } catch(e) {} finally { showLoading(false); }
+    }
+
+    function enterApp() {
+        document.getElementById('view-auth').classList.add('hidden');
+        document.getElementById('mainNav').classList.remove('hidden');
+        changeView('feed');
+    }
+
+    async function changeView(view, param = null) {
+        document.querySelectorAll('[id^="view-"]').forEach(v => v.classList.add('hidden'));
+        const target = document.getElementById('view-' + view);
+        if(target) target.classList.remove('hidden');
+        
+        if (view === 'auth') return;
+
+        showLoading(true, "正在讀取雲端資料...");
+        try {
+            const res = await fetch(scriptURL);
+            const data = await res.json();
+            
+            if (view === 'feed') renderPosts('feedContent', data.posts.filter(p => p.group === "公開"));
+            if (view === 'groups') renderGroups(data.groups);
+            if (view === 'group-detail') {
+                currentGroupName = param;
+                document.getElementById('gd-name').innerText = param;
+                renderPosts('groupDetailContent', data.posts.filter(p => p.group === param));
+            }
+            if (view === 'profile') {
+                const name = param || me.username;
+                document.getElementById('p-name').innerText = name;
+                renderPosts('profileContent', data.posts.filter(p => p.name === name));
+            }
+        } catch(e) { console.error(e); } 
+        finally { showLoading(false); }
+    }
+
+    function renderPosts(id, posts) {
+        const div = document.getElementById(id);
+        if(!posts || posts.length === 0) {
+            div.innerHTML = "<p style='text-align:center;padding:20px;color:gray;'>尚無貼文</p>";
+            return;
+        }
+        div.innerHTML = posts.reverse().map(p => `
+            <div class="card">
+                <div class="post-header">
+                    <div style="display:flex;align-items:center;cursor:pointer;" onclick="changeView('profile', '${p.name}')">
+                        <img class="avatar" src="${p.avatar || 'https://www.w3schools.com/howto/img_avatar.png'}">
+                        <b>${p.name}</b>
+                    </div>
+                    ${p.name === me.username ? `<button class="delete-btn" onclick="deletePost('${p.id}')">×</button>` : ''}
+                </div>
+                <div style="white-space:pre-wrap; line-height:1.5;">${p.content}</div>
+                <div style="font-size:12px;color:gray;margin-top:10px;">
+                    ${p.group !== '公開' ? `<span class="group-tag" onclick="changeView('group-detail', '${p.group}')"># ${p.group}</span> · ` : ''}
+                    ${p.time}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function deletePost(postId) {
+        if(!confirm("確定要刪除這篇貼文嗎？")) return;
+        showLoading(true, "正在刪除...");
+        try {
+            await apiRequest({ action: 'delete', postId: postId });
+            location.reload();
+        } finally { showLoading(false); }
+    }
+
+    function renderGroups(groups) {
+        const div = document.getElementById('groupList');
+        if(!groups || groups.length === 0) {
+            div.innerHTML = "<p style='text-align:center;padding:20px;color:gray;'>目前無社團</p>";
+            return;
+        }
+        div.innerHTML = groups.map(g => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom:1px solid #eee;">
+                <b>${g.name}</b>
+                <button onclick="changeView('group-detail', '${g.name}')" style="background:var(--fb-blue);color:white;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-weight:bold;">進入</button>
+            </div>
+        `).join('');
+    }
+
+    async function submitPost(group) {
+        const id = (group === '公開') ? 'postInput' : 'groupPostInput';
+        const c = document.getElementById(id).value.trim();
+        if(!c) return;
+        showLoading(true, "發佈中...");
+        try {
+            await apiRequest({ action: 'post', name: me.username, content: c, groupName: group });
+            location.reload();
+        } finally { showLoading(false); }
+    }
+
+    async function createGroup() {
+        const n = document.getElementById('gn').value.trim();
+        if(!n) return alert("請輸入社團名稱");
+        showLoading(true, "建立中...");
+        try {
+            await apiRequest({ action: 'createGroup', groupName: n, username: me.username });
+            changeView('groups');
+        } finally { showLoading(false); }
+    }
+
+    function logout() { localStorage.clear(); location.reload(); }
+    function updateAuthUI() {
+        document.getElementById('authTitle').innerText = isLoginMode ? "登入 SocialBook" : "註冊新帳號";
+        document.getElementById('toggleBtn').innerText = isLoginMode ? "註冊新帳號" : "返回登入";
+    }
+</script>
+
+</body>
+</html>
