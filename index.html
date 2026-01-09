@@ -6,7 +6,7 @@
     <title>SocialBook Pro - 終極穩定版</title>
     <style>
         :root { --fb-blue: #1877f2; --fb-green: #42b72a; --bg-gray: #f0f2f5; --text-main: #1c1e21; }
-        * { box-sizing: border-box; } /* 修正排版溢出 */
+        * { box-sizing: border-box; } 
         body { font-family: -apple-system, sans-serif; background: var(--bg-gray); margin: 0; color: var(--text-main); }
         
         /* 載入中動畫層 */
@@ -62,7 +62,7 @@
         <p onclick="isLoginMode=!isLoginMode; updateAuthUI()" style="color:var(--fb-blue); cursor:pointer; font-size:14px; margin-top:15px;" id="toggleBtn">註冊新帳號</p>
     </div>
 
-    <!-- 2. 首頁：只顯示公開貼文 -->
+    <!-- 2. 首頁 -->
     <div id="view-feed" class="hidden">
         <div class="card">
             <textarea id="postInput" rows="2" placeholder="分享新鮮事..."></textarea>
@@ -83,7 +83,7 @@
         <div id="groupList" class="card" style="padding:0;"></div>
     </div>
 
-    <!-- 4. 社團專頁：只顯示該社團貼文 -->
+    <!-- 4. 社團專頁 -->
     <div id="view-group-detail" class="hidden">
         <button onclick="changeView('groups')" style="margin-bottom:10px; border:none; background:none; color:var(--fb-blue); cursor:pointer; font-weight:bold;">← 返回列表</button>
         <div class="card" style="padding:0; overflow:hidden;">
@@ -97,7 +97,7 @@
         <div id="groupDetailContent"></div>
     </div>
 
-    <!-- 5. 個人主頁：顯示自己所有貼文 -->
+    <!-- 5. 個人主頁 -->
     <div id="view-profile" class="hidden">
         <div class="card" style="text-align:center;">
             <img id="p-avatar" src="https://www.w3schools.com/howto/img_avatar.png" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:2px solid #ddd;">
@@ -122,7 +122,6 @@
         document.getElementById('loader-text').innerText = text;
     }
 
-    // 核心 API 傳輸 (解決 CORS 與失靈問題)
     async function apiRequest(data) {
         try {
             const response = await fetch(scriptURL, {
@@ -132,7 +131,7 @@
             });
             return await response.text();
         } catch (err) {
-            alert("連線失敗！請檢查權限設定。\n錯誤：" + err.message);
+            alert("連線失敗！");
             throw err;
         }
     }
@@ -153,13 +152,26 @@
         } catch(e) {} finally { showLoading(false); }
     }
 
+    // 進入 App 時判斷應該去哪個頁面
     function enterApp() {
         document.getElementById('view-auth').classList.add('hidden');
         document.getElementById('mainNav').classList.remove('hidden');
-        changeView('feed');
+        
+        // 嘗試讀取上次停留的頁面紀錄
+        const lastView = JSON.parse(sessionStorage.getItem('social_last_view'));
+        if (lastView && lastView.view) {
+            changeView(lastView.view, lastView.param);
+        } else {
+            changeView('feed');
+        }
     }
 
     async function changeView(view, param = null) {
+        // 儲存當前位置到 Session (頁面重整後仍可讀取)
+        if (view !== 'auth') {
+            sessionStorage.setItem('social_last_view', JSON.stringify({ view, param }));
+        }
+
         document.querySelectorAll('[id^="view-"]').forEach(v => v.classList.add('hidden'));
         const target = document.getElementById('view-' + view);
         if(target) target.classList.remove('hidden');
@@ -216,7 +228,7 @@
         showLoading(true, "正在刪除...");
         try {
             await apiRequest({ action: 'delete', postId: postId });
-            location.reload();
+            location.reload(); // 重新整理後 enterApp 會帶你回原來的地方
         } finally { showLoading(false); }
     }
 
@@ -236,12 +248,14 @@
 
     async function submitPost(group) {
         const id = (group === '公開') ? 'postInput' : 'groupPostInput';
-        const c = document.getElementById(id).value.trim();
+        const inputEl = document.getElementById(id);
+        const c = inputEl.value.trim();
         if(!c) return;
         showLoading(true, "發佈中...");
         try {
             await apiRequest({ action: 'post', name: me.username, content: c, groupName: group });
-            location.reload();
+            inputEl.value = ""; // 清空輸入
+            location.reload();  // 重新整理後 enterApp 會帶你回原來的地方
         } finally { showLoading(false); }
     }
 
@@ -255,7 +269,12 @@
         } finally { showLoading(false); }
     }
 
-    function logout() { localStorage.clear(); location.reload(); }
+    function logout() { 
+        localStorage.clear(); 
+        sessionStorage.clear(); // 登出也要清掉頁面紀錄
+        location.reload(); 
+    }
+    
     function updateAuthUI() {
         document.getElementById('authTitle').innerText = isLoginMode ? "登入 SocialBook" : "註冊新帳號";
         document.getElementById('toggleBtn').innerText = isLoginMode ? "註冊新帳號" : "返回登入";
